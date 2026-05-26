@@ -33,14 +33,19 @@
   button.action{font:inherit; font-size:13px; cursor:pointer; border:1px solid var(--border); background:var(--panel); color:var(--ink); border-radius:8px; padding:8px 14px;}
   button.action:hover{background:var(--bg);}
   button.primary{background:var(--ink); color:#fff; border-color:var(--ink);}
+  button.danger{color:#c0392b;}
   #exportBox{margin-top:12px; width:100%; min-height:160px; display:none; font:inherit; font-size:12px; border:1px solid var(--border); border-radius:10px; padding:12px; background:var(--panel); color:var(--ink); white-space:pre; overflow:auto;}
   .saved{font-size:12px; color:var(--ane); opacity:0; transition:opacity .3s;}
   text{font-family:inherit;}
+  .lyr{font:inherit; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:7px; border:1px solid var(--border); background:var(--panel); color:var(--ink); border-radius:20px; padding:6px 13px;}
+  .lyr .sw{width:11px;height:11px;border-radius:50%;display:inline-block;}
+  .lyr.off{opacity:0.4; text-decoration:line-through;}
+  .lyr.off .sw{background:var(--ink3)!important;}
 </style>
 </head>
 <body>
   <h1>Viaje emocional del jugador · PIKtoPIK</h1>
-  <p class="sub">Toca un punto para abrir su ficha. Puedes editar el titulo, el canal, la intensidad y el texto. Arrastra un punto arriba/abajo para cambiar su intensidad. Cuando quieras conservar los cambios, pulsa "Exportar" y pega el resultado en el chat.</p>
+  <p class="sub">Toca un punto para abrir su ficha. La curva es la capa Experiencia (título, texto e intensidad editables; arrastra el punto para cambiar intensidad). Debajo, los carriles de Mensajes, Territorios, Cimas y Niveles. Las etiquetas de la izquierda encienden/apagan cada capa. Para conservar cambios, pulsa "Exportar" y pega el resultado en el chat.</p>
 
   <div class="legend">
     <span><span class="dot" style="background:var(--ane)"></span> Ane</span>
@@ -48,148 +53,384 @@
     <span class="hint">toca para ver · arrastra para cambiar intensidad</span>
   </div>
 
-  <svg id="tl" viewBox="0 0 680 340" xmlns="http://www.w3.org/2000/svg">
+  <input type="checkbox" id="layerEmo" checked hidden>
+  <input type="checkbox" id="layerMsg" checked hidden>
+  <input type="checkbox" id="layerTerr" checked hidden>
+  <input type="checkbox" id="layerCima" checked hidden>
+  <input type="checkbox" id="layerNivel" checked hidden>
+  <div id="rowLabels"></div>
+
+  <svg id="tl" viewBox="0 0 680 360" xmlns="http://www.w3.org/2000/svg">
     <g id="bands"></g><g id="grid"></g>
     <path id="line" fill="none" stroke="var(--ink3)" stroke-width="2"></path>
     <g id="points"></g>
+    <g id="terr"></g>
+    <g id="cima"></g>
+    <g id="nivel"></g>
+    <g id="msg"></g>
+    <g id="rlbl"></g>
   </svg>
-
   <div id="card" class="card"></div>
 
   <div class="toolbar">
-    <button class="action primary" id="exportBtn">Exportar &#8599;</button>
+    <button class="action" id="exportBtn">Exportar &#8599;</button>
     <button class="action" id="copyBtn">Copiar</button>
     <span class="saved" id="saved">copiado</span>
   </div>
   <textarea id="exportBox" readonly></textarea>
 
 <script>
-const SLOTS=20, MAXI=6, W=680,H=340,padL=30,padR=15,padT=46,padB=44;
+const SLOTS=40, MAXI=10, W=680,H=360,padL=96,padR=15,padT=40,padB=150, laneGap=28;
+const curveH=130;
 const plotW=W-padL-padR, plotH=H-padT-padB;
 const SVGNS="http://www.w3.org/2000/svg";
 
 const bandsDef=[
-  {name:'T1 · Descubrimiento', s0:1, s1:6, color:'var(--band1)'},
-  {name:'Travesía', s0:6, s1:16, color:'var(--band2)'},
-  {name:'Cumbre', s0:16, s1:20, color:'var(--band3)'}
+  {name:'T1 · Descubrimiento', s0:1, s1:11, color:'var(--band1)'},
+  {name:'Travesía', s0:11, s1:31, color:'var(--band2)'},
+  {name:'Cumbre', s0:31, s1:40, color:'var(--band3)'}
 ];
 
-const hitos=[
-  {slot:1, title:'Esto qué es', feel:'Me han dejado una app de montaña. Dicen que voy a subir cimas de verdad, las de Navarra. Una chica, Ane, me va a ir explicando. Todavía no sé nada de esto, pero quiero ver de qué va. Suena a aventura.', canal:'Ane', who:'ane', i:1},
-  {slot:2, title:'Quiero pisar mi primera cima', feel:'Estoy aprendiendo un montón y acertando preguntas. Ya sé qué llevar en la mochila y cómo leer el tiempo en el monte. Pero lo que de verdad quiero es subir mi primera cima. Ane me dice que ya falta poco, que cuando termine de prepararme la montaña estará esperándome. Cada cosa que desbloqueo me acerca. Tengo unas ganas que no puedo más.', canal:'Ane', who:'ane', i:1},
-  {slot:3, title:'Montañero de verdad', feel:'¡He logrado subir mi primera cima! Me lo he pasado de miedo y he vivido toda una aventura. Mañana lo contaré en la escuela. Maite es un poco seria pero es genial, es una leyenda. Mi familia está súper contenta. Solo las personas que suben montañas son montañeras.', canal:'Maite', who:'maite', i:5},
-  {slot:4, title:'Otra vez al monte', feel:'Ya subí mi primera cima y quiero más. Toca preparar la segunda, aquí cerca, en mi territorio. Ahora las preguntas me cuestan un poco más pero ya sé cómo va esto. Ane me recuerda que si hago las dos cimas del territorio pronto, gano algo extra. No quiero quedarme a medias: quiero completar mi primer territorio entero.', canal:'Ane', who:'ane', i:3},
-  {slot:5, title:'Dos cimas, primer territorio', feel:'¡Ya he subido las dos cimas de mi territorio! Y lo hice rápido, así que me he llevado el premio extra. Conozco este sitio entero: sus montañas, sus animales, sus plantas. Ane está contenta conmigo. Ya no soy el que empezó sin saber nada. Y todavía me queda muchísima montaña de Navarra por descubrir.', canal:'Maite', who:'maite', i:4},
-  {slot:6, title:'¡A explorar nuevos territorios!', feel:'Acabo de desbloquear un montón de contenidos nuevos, y sobre todo 4 nuevas cimas. Las preguntas de los quizz cada vez son más técnicas, pero es normal, ¡orientarse con una brújula no es fácil! Lo mejor de todo es que nuevos territorios son nuevas aventuras y diversión. Una cosa te voy a decir: las cimas son cada vez más altas, más largas y con cuestas más pinas. Son montañas de verdad, no un paseo con cuestas.', canal:'Ane', who:'ane', i:3},
-  {slot:9, title:'Ya sé lo que hago', feel:'Otra cima nueva, en un territorio que no conocía. Esta vez no iba tan nervioso: ya sé preparar la mochila, mirar el tiempo, ir a mi ritmo. Lo que aprendí en las primeras montañas me sirve aquí. Me siento más seguro, como si la montaña y yo ya nos conociéramos un poco. Y todavía me quedan cimas más grandes por delante.', canal:'Ane', who:'ane', i:4},
-  {slot:10, title:'Otro territorio en mi mapa', feel:'He cerrado otro territorio entero. Ya llevo varios y se nota: mi mapa de Navarra se va llenando. A veces alguna pregunta se me resiste o una cuesta me deja sin aire, pero sigo. Cada territorio que completo me hace sentir que esto va en serio, que de verdad me estoy convirtiendo en montañero.', canal:'Maite', who:'maite', i:4},
-  {slot:13, title:'Esto ya es de los mayores', feel:'Las cimas de ahora son largas de verdad, de las que cansan. Las preguntas son técnicas: orientación, riesgos, qué hacer si algo sale mal. A veces fallo y tengo que repasar. Pero me gusta que sea difícil, porque cuando lo consigo sé que no ha sido suerte. Esto ya no lo hace cualquiera.', canal:'Ane', who:'ane', i:4},
-  {slot:14, title:'Cuatro territorios', feel:'Ya he completado cuatro territorios. Miro atrás y casi no me lo creo: el que empezó sin saber nada era yo. Maite no regala las palabras, pero cuando me reconoce algo, sé que es de verdad. Me queda el último territorio, el más alto, el del Pirineo. El grande.', canal:'Maite', who:'maite', i:4},
-  {slot:16, title:'El Pirineo me espera', feel:'Se ha abierto el último territorio, el del Pirineo navarro. Es el más difícil de todos y lo sé. Aquí están las cimas más altas, las de verdad de verdad. Tengo un poco de respeto, pero sobre todo ganas. He llegado hasta aquí preparándome para esto. Ya casi soy montañero del todo.', canal:'Maite', who:'maite', i:3},
-  {slot:18, title:'La penúltima', feel:'Primera cima del Pirineo. Ha sido la más dura hasta ahora: más larga, más alta, más fría. Pero he sabido estar. Todo lo que aprendí en estos meses lo he usado hoy. Solo me queda una, la última, la más grande de todas. Estoy a un paso.', canal:'Ane', who:'ane', i:4},
-  {slot:20, title:'En qué me he convertido', feel:'Lo he conseguido. Diez cimas, dos en el Pirineo, todas las habilidades que necesito para ir al monte seguro. Maite me reconoce como montañero de verdad, y viniendo de ella eso es lo más grande. Miro todo el camino: empecé sin saber nada y ahora sé. Sé prepararme, sé decidir, conozco mi tierra. No me lo ha dado nadie. Lo he hecho yo.', canal:'Maite', who:'maite', i:6}
+const experiencia=[
+  {slot:1, i:2, title:'Experiencia 1', feel:'Describe aqui la experiencia en este punto.'},
+  {slot:3, i:2, title:'Experiencia 2', feel:'Describe aqui la experiencia en este punto.'},
+  {slot:5, i:8, title:'Experiencia 3', feel:'Describe aqui la experiencia en este punto.'},
+  {slot:7, i:5, title:'Experiencia 4', feel:'Describe aqui la experiencia en este punto.'},
+  {slot:9, i:7, title:'Experiencia 5', feel:'Describe aqui la experiencia en este punto.'},
+  {slot:11, i:5, title:'Experiencia 6', feel:'Describe aqui la experiencia en este punto.'},
+  {slot:17, i:7, title:'Experiencia 7', feel:'Describe aqui la experiencia en este punto.'},
+  {slot:19, i:7, title:'Experiencia 8', feel:'Describe aqui la experiencia en este punto.'},
+  {slot:25, i:7, title:'Experiencia 9', feel:'Describe aqui la experiencia en este punto.'},
+  {slot:27, i:7, title:'Experiencia 10', feel:'Describe aqui la experiencia en este punto.'},
+  {slot:31, i:5, title:'Experiencia 11', feel:'Describe aqui la experiencia en este punto.'},
+  {slot:35, i:7, title:'Experiencia 12', feel:'Describe aqui la experiencia en este punto.'},
+  {slot:40, i:10, title:'Experiencia 13', feel:'Describe aqui la experiencia en este punto.'}
+];
+const mensajes=[
+  {slot:1, title:'Esto qué es', feel:'Me han dejado una app de montaña. Dicen que voy a subir cimas de verdad, las de Navarra. Una chica, Ane, me va a ir explicando. Todavía no sé nada de esto, pero quiero ver de qué va. Suena a aventura.', canal:'Ane', who:'ane'},
+  {slot:3, title:'Quiero pisar mi primera cima', feel:'Estoy aprendiendo un montón y acertando preguntas. Ya sé qué llevar en la mochila y cómo leer el tiempo en el monte. Pero lo que de verdad quiero es subir mi primera cima. Ane me dice que ya falta poco, que cuando termine de prepararme la montaña estará esperándome. Cada cosa que desbloqueo me acerca. Tengo unas ganas que no puedo más.', canal:'Ane', who:'ane'},
+  {slot:5, title:'Montañero de verdad', feel:'¡He logrado subir mi primera cima! Me lo he pasado de miedo y he vivido toda una aventura. Mañana lo contaré en la escuela. Maite es un poco seria pero es genial, es una leyenda. Mi familia está súper contenta. Solo las personas que suben montañas son montañeras.', canal:'Maite', who:'maite'},
+  {slot:7, title:'Otra vez al monte', feel:'Ya subí mi primera cima y quiero más. Toca preparar la segunda, aquí cerca, en mi territorio. Ahora las preguntas me cuestan un poco más pero ya sé cómo va esto. Ane me recuerda que si hago las dos cimas del territorio pronto, gano algo extra. No quiero quedarme a medias: quiero completar mi primer territorio entero.', canal:'Ane', who:'ane'},
+  {slot:9, title:'Dos cimas, primer territorio', feel:'¡Ya he subido las dos cimas de mi territorio! Y lo hice rápido, así que me he llevado el premio extra. Conozco este sitio entero: sus montañas, sus animales, sus plantas. Ane está contenta conmigo. Ya no soy el que empezó sin saber nada. Y todavía me queda muchísima montaña de Navarra por descubrir.', canal:'Maite', who:'maite'},
+  {slot:11, title:'¡A explorar nuevos territorios!', feel:'Acabo de desbloquear un montón de contenidos nuevos, y sobre todo 4 nuevas cimas. Las preguntas de los quizz cada vez son más técnicas, pero es normal, ¡orientarse con una brújula no es fácil! Lo mejor de todo es que nuevos territorios son nuevas aventuras y diversión. Una cosa te voy a decir: las cimas son cada vez más altas, más largas y con cuestas más pinas. Son montañas de verdad, no un paseo con cuestas.', canal:'Ane', who:'ane'},
+  {slot:17, title:'Ya sé lo que hago', feel:'Otra cima nueva, en un territorio que no conocía. Esta vez no iba tan nervioso: ya sé preparar la mochila, mirar el tiempo, ir a mi ritmo. Lo que aprendí en las primeras montañas me sirve aquí. Me siento más seguro, como si la montaña y yo ya nos conociéramos un poco. Y todavía me quedan cimas más grandes por delante.', canal:'Ane', who:'ane'},
+  {slot:19, title:'Otro territorio en mi mapa', feel:'He cerrado otro territorio entero. Ya llevo varios y se nota: mi mapa de Navarra se va llenando. A veces alguna pregunta se me resiste o una cuesta me deja sin aire, pero sigo. Cada territorio que completo me hace sentir que esto va en serio, que de verdad me estoy convirtiendo en montañero.', canal:'Maite', who:'maite'},
+  {slot:25, title:'Esto ya es de los mayores', feel:'Las cimas de ahora son largas de verdad, de las que cansan. Las preguntas son técnicas: orientación, riesgos, qué hacer si algo sale mal. A veces fallo y tengo que repasar. Pero me gusta que sea difícil, porque cuando lo consigo sé que no ha sido suerte. Esto ya no lo hace cualquiera.', canal:'Ane', who:'ane'},
+  {slot:27, title:'Cuatro territorios', feel:'Ya he completado cuatro territorios. Miro atrás y casi no me lo creo: el que empezó sin saber nada era yo. Maite no regala las palabras, pero cuando me reconoce algo, sé que es de verdad. Me queda el último territorio, el más alto, el del Pirineo. El grande.', canal:'Maite', who:'maite'},
+  {slot:31, title:'El Pirineo me espera', feel:'Se ha abierto el último territorio, el del Pirineo navarro. Es el más difícil de todos y lo sé. Aquí están las cimas más altas, las de verdad de verdad. Tengo un poco de respeto, pero sobre todo ganas. He llegado hasta aquí preparándome para esto. Ya casi soy montañero del todo.', canal:'Maite', who:'maite'},
+  {slot:35, title:'La penúltima', feel:'Primera cima del Pirineo. Ha sido la más dura hasta ahora: más larga, más alta, más fría. Pero he sabido estar. Todo lo que aprendí en estos meses lo he usado hoy. Solo me queda una, la última, la más grande de todas. Estoy a un paso.', canal:'Ane', who:'ane'},
+  {slot:40, title:'En qué me he convertido', feel:'Lo he conseguido. Diez cimas, dos en el Pirineo, todas las habilidades que necesito para ir al monte seguro. Maite me reconoce como montañero de verdad, y viniendo de ella eso es lo más grande. Miro todo el camino: empecé sin saber nada y ahora sé. Sé prepararme, sé decidir, conozco mi tierra. No me lo ha dado nadie. Lo he hecho yo.', canal:'Maite', who:'maite'}
 ];
 
-const colorOf=w=>w==='maite'?'var(--maite)':'var(--ane)';
-const sx=s=>padL+((s-1)/(SLOTS-1))*plotW;
-const iy=i=>padT+(1-i/MAXI)*plotH;
-const yToI=y=>Math.max(0,Math.min(MAXI,Math.round((1-(y-padT)/plotH)*MAXI)));
+const colorOf=function(w){return w==='maite'?'var(--maite)':'var(--ane)';};
+const sx=function(s){return padL+((s-1)/(SLOTS-1))*plotW;};
+const iy=function(i){return padT+(1-i/MAXI)*curveH;};
+const yToI=function(y){return Math.max(0,Math.min(MAXI,Math.round((1-(y-padT)/curveH)*MAXI)));};
 
 const svg=document.getElementById('tl');
 const bands=document.getElementById('bands');
-bandsDef.forEach(b=>{
-  const x0=sx(b.s0),x1=sx(b.s1);
-  const r=document.createElementNS(SVGNS,'rect');
+bandsDef.forEach(function(b){
+  var x0=sx(b.s0),x1=sx(b.s1);
+  var r=document.createElementNS(SVGNS,'rect');
   r.setAttribute('x',x0);r.setAttribute('y',padT);r.setAttribute('width',x1-x0);
-  r.setAttribute('height',plotH);r.setAttribute('fill',b.color);r.setAttribute('opacity','0.55');
+  r.setAttribute('height',(padT+curveH+laneGap*4+14)-padT);r.setAttribute('fill',b.color);r.setAttribute('opacity','0.55');
   bands.appendChild(r);
-  const t=document.createElementNS(SVGNS,'text');
+  var t=document.createElementNS(SVGNS,'text');
   t.setAttribute('x',(x0+x1)/2);t.setAttribute('y',padT-14);t.setAttribute('text-anchor','middle');
   t.setAttribute('font-size','12');t.setAttribute('fill','var(--ink2)');t.textContent=b.name;
   bands.appendChild(t);
 });
 
 const grid=document.getElementById('grid');
-for(let s=1;s<=SLOTS;s++){
-  const x=sx(s);
-  const ln=document.createElementNS(SVGNS,'line');
-  ln.setAttribute('x1',x);ln.setAttribute('x2',x);ln.setAttribute('y1',padT);ln.setAttribute('y2',padT+plotH);
+for(var s=1;s<=SLOTS;s++){
+  var x=sx(s);
+  var ln=document.createElementNS(SVGNS,'line');
+  ln.setAttribute('x1',x);ln.setAttribute('x2',x);ln.setAttribute('y1',padT);ln.setAttribute('y2',padT+curveH+laneGap*4+14);
   ln.setAttribute('stroke','var(--border)');ln.setAttribute('stroke-width','1');
   grid.appendChild(ln);
-  const t=document.createElementNS(SVGNS,'text');
-  t.setAttribute('x',x);t.setAttribute('y',padT+plotH+18);t.setAttribute('text-anchor','middle');
-  t.setAttribute('font-size','10');t.setAttribute('fill','var(--ink3)');t.textContent=s;
-  grid.appendChild(t);
+  if(s===1||s%5===0||s===SLOTS){
+    var t2=document.createElementNS(SVGNS,'text');
+    t2.setAttribute('x',x);t2.setAttribute('y',padT+curveH+laneGap*4+30);t2.setAttribute('text-anchor','middle');
+    t2.setAttribute('font-size','10');t2.setAttribute('fill','var(--ink3)');t2.textContent=s;
+    grid.appendChild(t2);
+  }
 }
 
-const line=document.getElementById('line');
-const ptsG=document.getElementById('points');
-const card=document.getElementById('card');
-let current=hitos[0].slot;
+const msgY=padT+curveH+laneGap*1; const terrY=padT+curveH+laneGap*2;
+const cimaY=padT+curveH+laneGap*3;
+const nivelY=padT+curveH+laneGap*4;
 
-function redraw(){
-  const sorted=[...hitos].sort((a,b)=>a.slot-b.slot);
-  let d='';
-  sorted.forEach((h,k)=>{d+=(k===0?'M':'L')+sx(h.slot)+' '+iy(h.i)+' ';});
-  line.setAttribute('d',d);
-  ptsG.innerHTML='';
-  hitos.forEach(h=>{
-    const cx=sx(h.slot),cy=iy(h.i);
-    const c=document.createElementNS(SVGNS,'circle');
-    c.setAttribute('cx',cx);c.setAttribute('cy',cy);c.setAttribute('r','9');
-    c.setAttribute('fill',colorOf(h.who));c.setAttribute('stroke','var(--panel)');
-    c.setAttribute('stroke-width','2');c.style.cursor='ns-resize';c.dataset.slot=h.slot;
-    ptsG.appendChild(c);
-    const lb=document.createElementNS(SVGNS,'text');
-    lb.setAttribute('x',cx);lb.setAttribute('y',cy-15);lb.setAttribute('text-anchor','middle');
-    lb.setAttribute('font-size','8.5');lb.setAttribute('fill','var(--ink)');lb.style.pointerEvents='none';
-    lb.textContent=h.title.length>15?h.title.slice(0,14)+'…':h.title;
-    ptsG.appendChild(lb);
+const territorios=[
+  {t:'T1', slot:1,  label:'T1 abierto'},
+  {t:'T2', slot:5,  label:'T2 (1ª cima)'},
+  {t:'T3', slot:11, label:'T3 (2ª cima)'},
+  {t:'T4', slot:11, label:'T4 (2ª cima)'},
+  {t:'T5', slot:31, label:'T5 Pirineo (6 cimas)'}
+];
+const terrG=document.getElementById('terr');
+function drawTerr(){
+  terrG.innerHTML='';
+  if(!document.getElementById('layerTerr').checked) return;
+  var base=document.createElementNS(SVGNS,'line');
+  base.setAttribute('x1',sx(1));base.setAttribute('x2',sx(SLOTS));
+  base.setAttribute('y1',terrY);base.setAttribute('y2',terrY);
+  base.setAttribute('stroke','#D8C7AC');base.setAttribute('stroke-dasharray','4 4');base.setAttribute('stroke-width','1.5');
+  terrG.appendChild(base);
+  var bySlot={};
+  territorios.forEach(function(t){ (bySlot[t.slot]=bySlot[t.slot]||[]).push(t); });
+  Object.keys(bySlot).forEach(function(slotKey){
+    var slot=parseInt(slotKey);
+    var arr=bySlot[slot];
+    var cx=sx(slot);
+    arr.forEach(function(t,k){
+      var ox=arr.length>1?(k*16-8):0;
+      var c=document.createElementNS(SVGNS,'circle');
+      c.setAttribute('cx',cx+ox);c.setAttribute('cy',terrY);c.setAttribute('r','8');
+      c.setAttribute('fill','#C8A45A');c.setAttribute('stroke','var(--panel)');c.setAttribute('stroke-width','1.5');
+      terrG.appendChild(c);
+      var lb=document.createElementNS(SVGNS,'text');
+      lb.setAttribute('x',cx+ox);lb.setAttribute('y',terrY+3);lb.setAttribute('text-anchor','middle');
+      lb.setAttribute('font-size','9');lb.setAttribute('font-weight','600');lb.setAttribute('fill','#fff');lb.style.pointerEvents='none';
+      lb.textContent=t.t;
+      terrG.appendChild(lb);
+    });
   });
 }
 
-function showCard(slot){
-  current=slot;
-  const h=hitos.find(x=>x.slot===slot);
+const cimas=[
+  {n:1, slot:5,  terr:'T1', tipo:'A'},
+  {n:2, slot:9,  terr:'T1', tipo:'B'},
+  {n:3, slot:13, terr:'T2', tipo:'A'},
+  {n:4, slot:15, terr:'T2', tipo:'B'},
+  {n:5, slot:17, terr:'T3', tipo:'A'},
+  {n:6, slot:19, terr:'T3', tipo:'B'},
+  {n:7, slot:23, terr:'T4', tipo:'A'},
+  {n:8, slot:25, terr:'T4', tipo:'B'},
+  {n:9, slot:35, terr:'T5', tipo:'A'},
+  {n:10,slot:40, terr:'T5', tipo:'B', epica:true}
+];
+const cimaG=document.getElementById('cima');
+function drawCima(){
+  cimaG.innerHTML='';
+  if(!document.getElementById('layerCima').checked) return;
+  var base=document.createElementNS(SVGNS,'line');
+  base.setAttribute('x1',sx(1));base.setAttribute('x2',sx(SLOTS));
+  base.setAttribute('y1',cimaY);base.setAttribute('y2',cimaY);
+  base.setAttribute('stroke','#A9C7D8');base.setAttribute('stroke-dasharray','4 4');base.setAttribute('stroke-width','1.5');
+  cimaG.appendChild(base);
+  cimas.forEach(function(c){
+    var cx=sx(c.slot);
+    var fill=c.epica?'#3D6B8A':'#5B8FB0';
+    var circ=document.createElementNS(SVGNS,'circle');
+    circ.setAttribute('cx',cx);circ.setAttribute('cy',cimaY);circ.setAttribute('r',c.epica?'10':'8');
+    circ.setAttribute('fill',fill);circ.setAttribute('stroke','var(--panel)');circ.setAttribute('stroke-width','1.5');
+    cimaG.appendChild(circ);
+    var lb=document.createElementNS(SVGNS,'text');
+    lb.setAttribute('x',cx);lb.setAttribute('y',cimaY+3);lb.setAttribute('text-anchor','middle');
+    lb.setAttribute('font-size','9');lb.setAttribute('font-weight','600');lb.setAttribute('fill','#fff');lb.style.pointerEvents='none';
+    lb.textContent=c.n;
+    cimaG.appendChild(lb);
+  });
+}
+
+const niveles=[
+  {n:'N1', slot:1},
+  {n:'N2', slot:3},
+  {n:'N3', slot:5},
+  {n:'N4', slot:11},
+  {n:'N5', slot:15},
+  {n:'N6', slot:23},
+  {n:'N7', slot:31},
+  {n:'N8', slot:37},
+  {n:'N9', slot:40}
+];
+const nivelG=document.getElementById('nivel');
+function drawNivel(){
+  nivelG.innerHTML='';
+  if(!document.getElementById('layerNivel').checked) return;
+  var base=document.createElementNS(SVGNS,'line');
+  base.setAttribute('x1',sx(1));base.setAttribute('x2',sx(SLOTS));
+  base.setAttribute('y1',nivelY);base.setAttribute('y2',nivelY);
+  base.setAttribute('stroke','#C9B3D6');base.setAttribute('stroke-dasharray','4 4');base.setAttribute('stroke-width','1.5');
+  nivelG.appendChild(base);
+  niveles.forEach(function(v){
+    var cx=sx(v.slot);
+    var circ=document.createElementNS(SVGNS,'circle');
+    circ.setAttribute('cx',cx);circ.setAttribute('cy',nivelY);circ.setAttribute('r','8');
+    circ.setAttribute('fill','#9B72B0');circ.setAttribute('stroke','var(--panel)');circ.setAttribute('stroke-width','1.5');
+    nivelG.appendChild(circ);
+    var lb=document.createElementNS(SVGNS,'text');
+    lb.setAttribute('x',cx);lb.setAttribute('y',nivelY+3);lb.setAttribute('text-anchor','middle');
+    lb.setAttribute('font-size','8');lb.setAttribute('font-weight','600');lb.setAttribute('fill','#fff');lb.style.pointerEvents='none';
+    lb.textContent=v.n;
+    nivelG.appendChild(lb);
+  });
+}
+
+const msgG=document.getElementById('msg');
+function drawMsg(){
+  msgG.innerHTML='';
+  if(!document.getElementById('layerMsg').checked) return;
+  var base=document.createElementNS(SVGNS,'line');
+  base.setAttribute('x1',sx(1));base.setAttribute('x2',sx(SLOTS));
+  base.setAttribute('y1',msgY);base.setAttribute('y2',msgY);
+  base.setAttribute('stroke','var(--border)');base.setAttribute('stroke-dasharray','4 4');base.setAttribute('stroke-width','1.5');
+  msgG.appendChild(base);
+  var ordered=[].concat(mensajes).sort(function(a,b){return a.slot-b.slot;});
+  ordered.forEach(function(h,idx){
+    var cx=sx(h.slot);
+    var col=h.who==='maite'?'#7F77DD':'#1D9E75';
+    var c=document.createElementNS(SVGNS,'circle');
+    c.setAttribute('cx',cx);c.setAttribute('cy',msgY);c.setAttribute('r','8');
+    c.setAttribute('fill',col);c.setAttribute('stroke','var(--panel)');c.setAttribute('stroke-width','1.5');
+    c.style.cursor='pointer';c.dataset.msgslot=h.slot;
+    msgG.appendChild(c);
+    var lb=document.createElementNS(SVGNS,'text');
+    lb.setAttribute('x',cx);lb.setAttribute('y',msgY+3);lb.setAttribute('text-anchor','middle');
+    lb.setAttribute('font-size','9');lb.setAttribute('font-weight','600');lb.setAttribute('fill','#fff');lb.style.pointerEvents='none';
+    lb.textContent=idx+1;
+    msgG.appendChild(lb);
+  });
+}
+
+function drawRowLabels(){
+  var g=document.getElementById('rlbl');
+  g.innerHTML='';
+  var rows=[
+    {id:'layerEmo', txt:'Experiencia', y:padT+curveH*0.5, col:'var(--ink)'},
+    {id:'layerMsg', txt:'Mensajes', y:msgY, col:'#1D9E75'},
+    {id:'layerTerr', txt:'Territorios', y:terrY, col:'#C8A45A'},
+    {id:'layerCima', txt:'Cimas', y:cimaY, col:'#5B8FB0'},
+    {id:'layerNivel', txt:'Niveles', y:nivelY, col:'#9B72B0'}
+  ];
+  rows.forEach(function(r){
+    var on=document.getElementById(r.id).checked;
+    var grp=document.createElementNS(SVGNS,'g');
+    grp.style.cursor='pointer';
+    grp.addEventListener('click',function(){
+      var cb=document.getElementById(r.id); cb.checked=!cb.checked; redraw();
+    });
+    var dot=document.createElementNS(SVGNS,'circle');
+    dot.setAttribute('cx',12);dot.setAttribute('cy',r.y);dot.setAttribute('r',5);
+    dot.setAttribute('fill',on?r.col:'none');dot.setAttribute('stroke',r.col);dot.setAttribute('stroke-width','1.5');
+    grp.appendChild(dot);
+    var t=document.createElementNS(SVGNS,'text');
+    t.setAttribute('x',24);t.setAttribute('y',r.y+4);t.setAttribute('font-size','11');
+    t.setAttribute('fill',on?'var(--ink)':'var(--ink3)');
+    if(!on)t.setAttribute('text-decoration','line-through');
+    t.textContent=r.txt;
+    grp.appendChild(t);
+    g.appendChild(grp);
+  });
+}
+
+const card=document.getElementById('card');
+function showCardMsg(slot){
+  var h=mensajes.find(function(x){return x.slot===slot;});
+  if(!h)return;
+  var ordered=[].concat(mensajes).sort(function(a,b){return a.slot-b.slot;});
+  var num=ordered.findIndex(function(x){return x.slot===slot;})+1;
+  var cc=h.who==='maite'?'#7F77DD':'#1D9E75';
   card.innerHTML=''
     +'<div class="card-head">'
-      +'<button class="dot-btn" id="whoBtn" style="background:'+colorOf(h.who)+'" title="cambiar canal"></button>'
+      +'<button class="dot-btn" id="whoBtn" style="background:'+cc+'"></button>'
+      +'<span style="font-weight:700;color:var(--ink2);font-size:14px">'+num+'.</span>'
       +'<div class="card-title" contenteditable="true" id="titleEd">'+h.title+'</div>'
       +'<div class="meta">'
-        +'<span>slot '+h.slot+'</span>'
+        +'<label>slot <input type="number" id="slotEd" min="1" max="40" value="'+h.slot+'"></label>'
         +'<select id="canalSel"><option value="ane"'+(h.who==='ane'?' selected':'')+'>Ane</option><option value="maite"'+(h.who==='maite'?' selected':'')+'>Maite</option></select>'
-        +'<label>int. <input type="number" id="intEd" min="0" max="6" value="'+h.i+'"></label>'
       +'</div>'
     +'</div>'
     +'<p class="card-feel" contenteditable="true" id="feelEd">'+h.feel+'</p>';
-
-  document.getElementById('titleEd').addEventListener('input',e=>{h.title=e.target.textContent; redraw();});
-  document.getElementById('feelEd').addEventListener('input',e=>{h.feel=e.target.textContent;});
-  document.getElementById('canalSel').addEventListener('change',e=>{h.who=e.target.value; h.canal=e.target.value==='maite'?'Maite':'Ane'; document.getElementById('whoBtn').style.background=colorOf(h.who); redraw();});
-  document.getElementById('intEd').addEventListener('input',e=>{var v=parseInt(e.target.value)||0; v=Math.max(0,Math.min(6,v)); h.i=v; redraw();});
-  document.getElementById('whoBtn').addEventListener('click',function(){h.who=h.who==='maite'?'ane':'maite'; h.canal=h.who==='maite'?'Maite':'Ane'; showCard(slot); redraw();});
+  document.getElementById('titleEd').addEventListener('input',function(e){h.title=e.target.textContent; redraw();});
+  document.getElementById('feelEd').addEventListener('input',function(e){h.feel=e.target.textContent;});
+  document.getElementById('canalSel').addEventListener('change',function(e){h.who=e.target.value; h.canal=e.target.value==='maite'?'Maite':'Ane'; document.getElementById('whoBtn').style.background=(h.who==='maite'?'#7F77DD':'#1D9E75'); redraw();});
+  document.getElementById('slotEd').addEventListener('change',function(e){var v=parseInt(e.target.value)||h.slot; v=Math.max(1,Math.min(40,v)); h.slot=v; redraw(); showCardMsg(v);});
+  document.getElementById('whoBtn').addEventListener('click',function(){h.who=h.who==='maite'?'ane':'maite'; h.canal=h.who==='maite'?'Maite':'Ane'; redraw(); showCardMsg(slot);});
 }
 
-let drag=null;
+function showCardExp(slot){
+  var h=experiencia.find(function(x){return x.slot===slot;});
+  if(!h)return;
+  card.innerHTML=''
+    +'<div class="card-head">'
+      +'<span style="width:12px;height:12px;border-radius:50%;background:var(--ink);display:inline-block;"></span>'
+      +'<div class="card-title" contenteditable="true" id="expTitle">'+(h.title||'')+'</div>'
+      +'<div class="meta">'
+        +'<label>slot <input type="number" id="expSlot" min="1" max="40" value="'+h.slot+'"></label>'
+        +'<label>int. <input type="number" id="expInt" min="0" max="10" value="'+h.i+'"></label>'
+      +'</div>'
+    +'</div>'
+    +'<p class="card-feel" contenteditable="true" id="expFeel">'+(h.feel||'')+'</p>';
+  document.getElementById('expTitle').addEventListener('input',function(e){h.title=e.target.textContent;});
+  document.getElementById('expFeel').addEventListener('input',function(e){h.feel=e.target.textContent;});
+  document.getElementById('expInt').addEventListener('input',function(e){var v=parseInt(e.target.value)||0;v=Math.max(0,Math.min(10,v));h.i=v;redraw();});
+  document.getElementById('expSlot').addEventListener('change',function(e){var v=parseInt(e.target.value)||h.slot;v=Math.max(1,Math.min(40,v));h.slot=v;redraw();showCardExp(v);});
+}
+
+function redraw(){
+  var expOn=document.getElementById('layerEmo').checked;
+  ptsG.innerHTML='';
+  if(expOn){
+    var sorted=[].concat(experiencia).sort(function(a,b){return a.slot-b.slot;});
+    var d='';
+    sorted.forEach(function(h,k){d+=(k===0?'M':'L')+sx(h.slot)+' '+iy(h.i)+' ';});
+    line.setAttribute('d',d); line.style.display='';
+    sorted.forEach(function(h){
+      var cx=sx(h.slot),cy=iy(h.i);
+      var c=document.createElementNS(SVGNS,'circle');
+      c.setAttribute('cx',cx);c.setAttribute('cy',cy);c.setAttribute('r','5');
+      c.setAttribute('fill','var(--ink)');c.setAttribute('stroke','var(--panel)');c.setAttribute('stroke-width','1.5');
+      c.style.cursor='pointer';c.dataset.expslot=h.slot;
+      ptsG.appendChild(c);
+    });
+  } else {
+    line.setAttribute('d',''); line.style.display='none';
+  }
+  drawMsg();
+  drawTerr();
+  drawCima();
+  drawNivel();
+  drawRowLabels();
+}
+
+const ptsG=document.getElementById('points');
+const line=document.getElementById('line');
+
+let drag=null, dragMoved=false, downSlot=null, downMsg=null;
 function getY(e){var r=svg.getBoundingClientRect();var cy=(e.touches?e.touches[0].clientY:e.clientY);return (cy-r.top)*(H/r.height);}
+
 svg.addEventListener('pointerdown',function(e){
-  if(e.target.dataset&&e.target.dataset.slot){
-    drag=parseInt(e.target.dataset.slot);svg.setPointerCapture(e.pointerId);showCard(drag);
+  dragMoved=false; downSlot=null; downMsg=null;
+  if(e.target.dataset && e.target.dataset.expslot){
+    downSlot=parseInt(e.target.dataset.expslot);
+    drag=downSlot; svg.setPointerCapture(e.pointerId);
+  } else if(e.target.dataset && e.target.dataset.msgslot){
+    downMsg=parseInt(e.target.dataset.msgslot);
   }
 });
+
 svg.addEventListener('pointermove',function(e){
-  if(drag===null)return;
-  var h=hitos.find(function(x){return x.slot===drag;});h.i=yToI(getY(e));
-  var ie=document.getElementById('intEd'); if(ie)ie.value=h.i;
+  if(drag===null) return;
+  dragMoved=true;
+  var h2=experiencia.find(function(x){return x.slot===drag;}); if(!h2) return;
+  h2.i=yToI(getY(e));
   redraw();
 });
-svg.addEventListener('pointerup',function(){drag=null;});
+
+svg.addEventListener('pointerup',function(e){
+  if(drag!==null && !dragMoved){ showCardExp(drag); }
+  if(downMsg!==null){ showCardMsg(downMsg); }
+  drag=null; downSlot=null; downMsg=null;
+});
 
 document.getElementById('exportBtn').addEventListener('click',function(){
   var box=document.getElementById('exportBox');
-  var sorted=[].concat(hitos).sort(function(a,b){return a.slot-b.slot;});
-  var txt=sorted.map(function(h){return 'Slot '+h.slot+' — '+h.title+'\n  Canal: '+h.canal+' · Intensidad: '+h.i+'/6\n  '+h.feel;}).join('\n\n');
-  box.value='VIAJE EMOCIONAL · PIKtoPIK (editado)\n\n'+txt;
+  var se=[].concat(experiencia).sort(function(a,b){return a.slot-b.slot;});
+  var sm=[].concat(mensajes).sort(function(a,b){return a.slot-b.slot;});
+  var t1='CURVA DE EXPERIENCIA\n'+se.map(function(h){return 'Slot '+h.slot+' — '+(h.title||'')+' (int '+h.i+'/10)\n  '+(h.feel||'');}).join('\n');
+  var t2='\n\nMENSAJES\n'+sm.map(function(h){return 'Slot '+h.slot+' — '+h.title+' ['+h.canal+']\n  '+h.feel;}).join('\n');
+  box.value=t1+t2;
   box.style.display='block';
 });
 document.getElementById('copyBtn').addEventListener('click',function(){
@@ -197,11 +438,10 @@ document.getElementById('copyBtn').addEventListener('click',function(){
   if(box.style.display==='none'){document.getElementById('exportBtn').click();}
   box.select();
   try{navigator.clipboard.writeText(box.value);}catch(e){document.execCommand('copy');}
-  var s=document.getElementById('saved');s.style.opacity='1';setTimeout(function(){s.style.opacity='0';},1200);
+  var sv=document.getElementById('saved');sv.style.opacity='1';setTimeout(function(){sv.style.opacity='0';},1200);
 });
 
 redraw();
-showCard(1);
 </script>
 </body>
 </html>
