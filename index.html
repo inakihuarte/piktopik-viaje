@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Viaje emocional del jugador · PIKtoPIK</title>
+<style>
+  :root{
+    --bg:#FbFaf7; --panel:#ffffff; --ink:#2b2a27; --ink2:#6b6a64; --ink3:#a3a29b;
+    --border:#e7e5df; --ane:#1D9E75; --maite:#7F77DD;
+    --band1:#E1F5EE; --band2:#FAEEDA; --band3:#EEEDFE;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif; padding:24px;}
+  h1{font-size:20px; margin:0 0 4px;}
+  .sub{font-size:13px; color:var(--ink2); margin:0 0 18px; max-width:620px; line-height:1.5;}
+  .legend{display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-bottom:12px; font-size:13px; color:var(--ink2);}
+  .dot{width:12px;height:12px;border-radius:50%;display:inline-block;}
+  .hint{margin-left:auto; color:var(--ink3); font-size:12px;}
+  svg{width:100%; height:auto; touch-action:none; user-select:none;}
+  .card{margin-top:14px; background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:16px 20px;}
+  .card-head{display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;}
+  .dot-btn{border:none; cursor:pointer; padding:0; width:14px;height:14px;border-radius:50%;}
+  .card-title{font-size:16px; font-weight:600; border:1px solid transparent; border-radius:6px; padding:2px 6px; flex:1; min-width:160px;}
+  .card-title:focus{outline:none; border-color:var(--border); background:var(--bg);}
+  .meta{display:flex; align-items:center; gap:8px; font-size:12px; color:var(--ink2);}
+  .meta select, .meta input{font:inherit; font-size:12px; border:1px solid var(--border); border-radius:6px; padding:2px 6px; background:var(--bg); color:var(--ink);}
+  .meta input{width:46px; text-align:center;}
+  .card-feel{margin:0; font-size:15px; line-height:1.6; border:1px solid transparent; border-radius:8px; padding:6px 8px;}
+  .card-feel:focus{outline:none; border-color:var(--border); background:var(--bg);}
+  .toolbar{margin-top:16px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+  button.action{font:inherit; font-size:13px; cursor:pointer; border:1px solid var(--border); background:var(--panel); color:var(--ink); border-radius:8px; padding:8px 14px;}
+  button.action:hover{background:var(--bg);}
+  button.primary{background:var(--ink); color:#fff; border-color:var(--ink);}
+  #exportBox{margin-top:12px; width:100%; min-height:160px; display:none; font:inherit; font-size:12px; border:1px solid var(--border); border-radius:10px; padding:12px; background:var(--panel); color:var(--ink); white-space:pre; overflow:auto;}
+  .saved{font-size:12px; color:var(--ane); opacity:0; transition:opacity .3s;}
+  text{font-family:inherit;}
+</style>
+</head>
+<body>
+  <h1>Viaje emocional del jugador · PIKtoPIK</h1>
+  <p class="sub">Toca un punto para abrir su ficha. Puedes editar el titulo, el canal, la intensidad y el texto. Arrastra un punto arriba/abajo para cambiar su intensidad. Cuando quieras conservar los cambios, pulsa "Exportar" y pega el resultado en el chat.</p>
+
+  <div class="legend">
+    <span><span class="dot" style="background:var(--ane)"></span> Ane</span>
+    <span><span class="dot" style="background:var(--maite)"></span> Maite</span>
+    <span class="hint">toca para ver · arrastra para cambiar intensidad</span>
+  </div>
+
+  <svg id="tl" viewBox="0 0 680 340" xmlns="http://www.w3.org/2000/svg">
+    <g id="bands"></g><g id="grid"></g>
+    <path id="line" fill="none" stroke="var(--ink3)" stroke-width="2"></path>
+    <g id="points"></g>
+  </svg>
+
+  <div id="card" class="card"></div>
+
+  <div class="toolbar">
+    <button class="action primary" id="exportBtn">Exportar &#8599;</button>
+    <button class="action" id="copyBtn">Copiar</button>
+    <span class="saved" id="saved">copiado</span>
+  </div>
+  <textarea id="exportBox" readonly></textarea>
+
+<script>
+const SLOTS=20, MAXI=6, W=680,H=340,padL=30,padR=15,padT=46,padB=44;
+const plotW=W-padL-padR, plotH=H-padT-padB;
+const SVGNS="http://www.w3.org/2000/svg";
+
+const bandsDef=[
+  {name:'T1 · Descubrimiento', s0:1, s1:6, color:'var(--band1)'},
+  {name:'Travesía', s0:6, s1:16, color:'var(--band2)'},
+  {name:'Cumbre', s0:16, s1:20, color:'var(--band3)'}
+];
+
+const hitos=[
+  {slot:1, title:'Esto qué es', feel:'Me han dejado una app de montaña. Dicen que voy a subir cimas de verdad, las de Navarra. Una chica, Ane, me va a ir explicando. Todavía no sé nada de esto, pero quiero ver de qué va. Suena a aventura.', canal:'Ane', who:'ane', i:1},
+  {slot:2, title:'Quiero pisar mi primera cima', feel:'Estoy aprendiendo un montón y acertando preguntas. Ya sé qué llevar en la mochila y cómo leer el tiempo en el monte. Pero lo que de verdad quiero es subir mi primera cima. Ane me dice que ya falta poco, que cuando termine de prepararme la montaña estará esperándome. Cada cosa que desbloqueo me acerca. Tengo unas ganas que no puedo más.', canal:'Ane', who:'ane', i:1},
+  {slot:3, title:'Montañero de verdad', feel:'¡He logrado subir mi primera cima! Me lo he pasado de miedo y he vivido toda una aventura. Mañana lo contaré en la escuela. Maite es un poco seria pero es genial, es una leyenda. Mi familia está súper contenta. Solo las personas que suben montañas son montañeras.', canal:'Maite', who:'maite', i:5},
+  {slot:4, title:'Otra vez al monte', feel:'Ya subí mi primera cima y quiero más. Toca preparar la segunda, aquí cerca, en mi territorio. Ahora las preguntas me cuestan un poco más pero ya sé cómo va esto. Ane me recuerda que si hago las dos cimas del territorio pronto, gano algo extra. No quiero quedarme a medias: quiero completar mi primer territorio entero.', canal:'Ane', who:'ane', i:3},
+  {slot:5, title:'Dos cimas, primer territorio', feel:'¡Ya he subido las dos cimas de mi territorio! Y lo hice rápido, así que me he llevado el premio extra. Conozco este sitio entero: sus montañas, sus animales, sus plantas. Ane está contenta conmigo. Ya no soy el que empezó sin saber nada. Y todavía me queda muchísima montaña de Navarra por descubrir.', canal:'Maite', who:'maite', i:4},
+  {slot:6, title:'¡A explorar nuevos territorios!', feel:'Acabo de desbloquear un montón de contenidos nuevos, y sobre todo 4 nuevas cimas. Las preguntas de los quizz cada vez son más técnicas, pero es normal, ¡orientarse con una brújula no es fácil! Lo mejor de todo es que nuevos territorios son nuevas aventuras y diversión. Una cosa te voy a decir: las cimas son cada vez más altas, más largas y con cuestas más pinas. Son montañas de verdad, no un paseo con cuestas.', canal:'Ane', who:'ane', i:3},
+  {slot:9, title:'Ya sé lo que hago', feel:'Otra cima nueva, en un territorio que no conocía. Esta vez no iba tan nervioso: ya sé preparar la mochila, mirar el tiempo, ir a mi ritmo. Lo que aprendí en las primeras montañas me sirve aquí. Me siento más seguro, como si la montaña y yo ya nos conociéramos un poco. Y todavía me quedan cimas más grandes por delante.', canal:'Ane', who:'ane', i:4},
+  {slot:10, title:'Otro territorio en mi mapa', feel:'He cerrado otro territorio entero. Ya llevo varios y se nota: mi mapa de Navarra se va llenando. A veces alguna pregunta se me resiste o una cuesta me deja sin aire, pero sigo. Cada territorio que completo me hace sentir que esto va en serio, que de verdad me estoy convirtiendo en montañero.', canal:'Maite', who:'maite', i:4},
+  {slot:13, title:'Esto ya es de los mayores', feel:'Las cimas de ahora son largas de verdad, de las que cansan. Las preguntas son técnicas: orientación, riesgos, qué hacer si algo sale mal. A veces fallo y tengo que repasar. Pero me gusta que sea difícil, porque cuando lo consigo sé que no ha sido suerte. Esto ya no lo hace cualquiera.', canal:'Ane', who:'ane', i:4},
+  {slot:14, title:'Cuatro territorios', feel:'Ya he completado cuatro territorios. Miro atrás y casi no me lo creo: el que empezó sin saber nada era yo. Maite no regala las palabras, pero cuando me reconoce algo, sé que es de verdad. Me queda el último territorio, el más alto, el del Pirineo. El grande.', canal:'Maite', who:'maite', i:4},
+  {slot:16, title:'El Pirineo me espera', feel:'Se ha abierto el último territorio, el del Pirineo navarro. Es el más difícil de todos y lo sé. Aquí están las cimas más altas, las de verdad de verdad. Tengo un poco de respeto, pero sobre todo ganas. He llegado hasta aquí preparándome para esto. Ya casi soy montañero del todo.', canal:'Maite', who:'maite', i:3},
+  {slot:18, title:'La penúltima', feel:'Primera cima del Pirineo. Ha sido la más dura hasta ahora: más larga, más alta, más fría. Pero he sabido estar. Todo lo que aprendí en estos meses lo he usado hoy. Solo me queda una, la última, la más grande de todas. Estoy a un paso.', canal:'Ane', who:'ane', i:4},
+  {slot:20, title:'En qué me he convertido', feel:'Lo he conseguido. Diez cimas, dos en el Pirineo, todas las habilidades que necesito para ir al monte seguro. Maite me reconoce como montañero de verdad, y viniendo de ella eso es lo más grande. Miro todo el camino: empecé sin saber nada y ahora sé. Sé prepararme, sé decidir, conozco mi tierra. No me lo ha dado nadie. Lo he hecho yo.', canal:'Maite', who:'maite', i:6}
+];
+
+const colorOf=w=>w==='maite'?'var(--maite)':'var(--ane)';
+const sx=s=>padL+((s-1)/(SLOTS-1))*plotW;
+const iy=i=>padT+(1-i/MAXI)*plotH;
+const yToI=y=>Math.max(0,Math.min(MAXI,Math.round((1-(y-padT)/plotH)*MAXI)));
+
+const svg=document.getElementById('tl');
+const bands=document.getElementById('bands');
+bandsDef.forEach(b=>{
+  const x0=sx(b.s0),x1=sx(b.s1);
+  const r=document.createElementNS(SVGNS,'rect');
+  r.setAttribute('x',x0);r.setAttribute('y',padT);r.setAttribute('width',x1-x0);
+  r.setAttribute('height',plotH);r.setAttribute('fill',b.color);r.setAttribute('opacity','0.55');
+  bands.appendChild(r);
+  const t=document.createElementNS(SVGNS,'text');
+  t.setAttribute('x',(x0+x1)/2);t.setAttribute('y',padT-14);t.setAttribute('text-anchor','middle');
+  t.setAttribute('font-size','12');t.setAttribute('fill','var(--ink2)');t.textContent=b.name;
+  bands.appendChild(t);
+});
+
+const grid=document.getElementById('grid');
+for(let s=1;s<=SLOTS;s++){
+  const x=sx(s);
+  const ln=document.createElementNS(SVGNS,'line');
+  ln.setAttribute('x1',x);ln.setAttribute('x2',x);ln.setAttribute('y1',padT);ln.setAttribute('y2',padT+plotH);
+  ln.setAttribute('stroke','var(--border)');ln.setAttribute('stroke-width','1');
+  grid.appendChild(ln);
+  const t=document.createElementNS(SVGNS,'text');
+  t.setAttribute('x',x);t.setAttribute('y',padT+plotH+18);t.setAttribute('text-anchor','middle');
+  t.setAttribute('font-size','10');t.setAttribute('fill','var(--ink3)');t.textContent=s;
+  grid.appendChild(t);
+}
+
+const line=document.getElementById('line');
+const ptsG=document.getElementById('points');
+const card=document.getElementById('card');
+let current=hitos[0].slot;
+
+function redraw(){
+  const sorted=[...hitos].sort((a,b)=>a.slot-b.slot);
+  let d='';
+  sorted.forEach((h,k)=>{d+=(k===0?'M':'L')+sx(h.slot)+' '+iy(h.i)+' ';});
+  line.setAttribute('d',d);
+  ptsG.innerHTML='';
+  hitos.forEach(h=>{
+    const cx=sx(h.slot),cy=iy(h.i);
+    const c=document.createElementNS(SVGNS,'circle');
+    c.setAttribute('cx',cx);c.setAttribute('cy',cy);c.setAttribute('r','9');
+    c.setAttribute('fill',colorOf(h.who));c.setAttribute('stroke','var(--panel)');
+    c.setAttribute('stroke-width','2');c.style.cursor='ns-resize';c.dataset.slot=h.slot;
+    ptsG.appendChild(c);
+    const lb=document.createElementNS(SVGNS,'text');
+    lb.setAttribute('x',cx);lb.setAttribute('y',cy-15);lb.setAttribute('text-anchor','middle');
+    lb.setAttribute('font-size','8.5');lb.setAttribute('fill','var(--ink)');lb.style.pointerEvents='none';
+    lb.textContent=h.title.length>15?h.title.slice(0,14)+'…':h.title;
+    ptsG.appendChild(lb);
+  });
+}
+
+function showCard(slot){
+  current=slot;
+  const h=hitos.find(x=>x.slot===slot);
+  card.innerHTML=''
+    +'<div class="card-head">'
+      +'<button class="dot-btn" id="whoBtn" style="background:'+colorOf(h.who)+'" title="cambiar canal"></button>'
+      +'<div class="card-title" contenteditable="true" id="titleEd">'+h.title+'</div>'
+      +'<div class="meta">'
+        +'<span>slot '+h.slot+'</span>'
+        +'<select id="canalSel"><option value="ane"'+(h.who==='ane'?' selected':'')+'>Ane</option><option value="maite"'+(h.who==='maite'?' selected':'')+'>Maite</option></select>'
+        +'<label>int. <input type="number" id="intEd" min="0" max="6" value="'+h.i+'"></label>'
+      +'</div>'
+    +'</div>'
+    +'<p class="card-feel" contenteditable="true" id="feelEd">'+h.feel+'</p>';
+
+  document.getElementById('titleEd').addEventListener('input',e=>{h.title=e.target.textContent; redraw();});
+  document.getElementById('feelEd').addEventListener('input',e=>{h.feel=e.target.textContent;});
+  document.getElementById('canalSel').addEventListener('change',e=>{h.who=e.target.value; h.canal=e.target.value==='maite'?'Maite':'Ane'; document.getElementById('whoBtn').style.background=colorOf(h.who); redraw();});
+  document.getElementById('intEd').addEventListener('input',e=>{var v=parseInt(e.target.value)||0; v=Math.max(0,Math.min(6,v)); h.i=v; redraw();});
+  document.getElementById('whoBtn').addEventListener('click',function(){h.who=h.who==='maite'?'ane':'maite'; h.canal=h.who==='maite'?'Maite':'Ane'; showCard(slot); redraw();});
+}
+
+let drag=null;
+function getY(e){var r=svg.getBoundingClientRect();var cy=(e.touches?e.touches[0].clientY:e.clientY);return (cy-r.top)*(H/r.height);}
+svg.addEventListener('pointerdown',function(e){
+  if(e.target.dataset&&e.target.dataset.slot){
+    drag=parseInt(e.target.dataset.slot);svg.setPointerCapture(e.pointerId);showCard(drag);
+  }
+});
+svg.addEventListener('pointermove',function(e){
+  if(drag===null)return;
+  var h=hitos.find(function(x){return x.slot===drag;});h.i=yToI(getY(e));
+  var ie=document.getElementById('intEd'); if(ie)ie.value=h.i;
+  redraw();
+});
+svg.addEventListener('pointerup',function(){drag=null;});
+
+document.getElementById('exportBtn').addEventListener('click',function(){
+  var box=document.getElementById('exportBox');
+  var sorted=[].concat(hitos).sort(function(a,b){return a.slot-b.slot;});
+  var txt=sorted.map(function(h){return 'Slot '+h.slot+' — '+h.title+'\n  Canal: '+h.canal+' · Intensidad: '+h.i+'/6\n  '+h.feel;}).join('\n\n');
+  box.value='VIAJE EMOCIONAL · PIKtoPIK (editado)\n\n'+txt;
+  box.style.display='block';
+});
+document.getElementById('copyBtn').addEventListener('click',function(){
+  var box=document.getElementById('exportBox');
+  if(box.style.display==='none'){document.getElementById('exportBtn').click();}
+  box.select();
+  try{navigator.clipboard.writeText(box.value);}catch(e){document.execCommand('copy');}
+  var s=document.getElementById('saved');s.style.opacity='1';setTimeout(function(){s.style.opacity='0';},1200);
+});
+
+redraw();
+showCard(1);
+</script>
+</body>
+</html>
